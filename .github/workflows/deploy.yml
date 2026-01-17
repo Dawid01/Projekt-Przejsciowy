@@ -1,0 +1,41 @@
+name: Deploy to server
+
+on:
+  push:
+    branches:
+      - mcp-spring-automatic-deployment
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Deploy via SSH
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.SSH_HOST }}
+          username: ${{ secrets.SSH_USER }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          port: ${{ secrets.SSH_PORT }}
+          script: |
+            set -euo pipefail
+
+            cd /home/mikol/app
+
+            # zawsze ustawiamy dokładnie branch jak w triggerze
+            git fetch --all --prune
+            git checkout -f mcp-spring-automatic-deployment
+            git reset --hard origin/mcp-spring-automatic-deployment
+
+            # jeśli docker-compose jest w podkatalogu asmo/, wejdź do niego
+            if [ -d "asmo" ] && [ -f "asmo/docker-compose.yml" ]; then
+              cd asmo
+            fi
+
+            cd /home/mikol/app/asmo
+
+            sudo docker compose down --remove-orphans || true
+            sudo docker rm -f asmo-server || true
+
+            sudo docker compose up -d --build
+            sudo docker compose ps
+            sudo docker logs --tail=200 asmo-server || true
